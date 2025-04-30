@@ -8,6 +8,10 @@ requirements = []
 path = "contracts/fleet-registry.clar"
 depends_on = []
 
+[contracts.location-tracker]
+path = "contracts/location-tracker.clar"
+depends_on = []
+
 [repl]
 costs_version = 2
 parser_version = 2

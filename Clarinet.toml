@@ -4,6 +4,10 @@ authors = []
 description = ""
 telemetry = false
 requirements = []
+[contracts.driver-management]
+path = "contracts/driver-management.clar"
+depends_on = []
+
 [contracts.fleet-registry]
 path = "contracts/fleet-registry.clar"
 depends_on = []

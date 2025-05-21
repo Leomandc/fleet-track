@@ -71,13 +71,13 @@
 
 ;; Performance metrics for drivers
 (define-map driver-performance
-    { driver: principal, period: (string-ascii 10) } ;; e.g., "2023-Q1"
+    { driver: principal, period: (string-ascii 10) }
     {
-        fuel-efficiency: uint, ;; in miles per gallon × 100 (for decimal precision)
+        fuel-efficiency: uint,
         on-time-deliveries: uint,
         late-deliveries: uint,
         safety-incidents: uint,
-        customer-rating: uint ;; out of 1000 (for decimal precision)
+        customer-rating: uint
     }
 )
 
@@ -210,18 +210,6 @@
     )
 )
 
-;; Check if a driver has all required qualifications for a vehicle
-(define-private (has-required-qualifications (driver-principal principal) (qualification-ids (list 10 (string-ascii 20))))
-    (let (
-        (current-block-height block-height)
-    )
-        (is-eq
-            (len qualification-ids)
-            (fold check-qualification u0 qualification-ids)
-        )
-    )
-)
-
 ;; Helper function to check if a driver has a specific qualification and it's not expired
 (define-private (check-qualification (acc uint) (qualification-id (string-ascii 20)))
     (let (
@@ -238,38 +226,6 @@
 )
 
 ;; Assignment functions
-
-;; Assign a vehicle to a driver
-(define-public (assign-vehicle (vehicle-id (string-ascii 20)) (driver-principal principal) (expected-return uint))
-    (let (
-        (vehicle (unwrap! (map-get? vehicles vehicle-id) ERR-VEHICLE-NOT-FOUND))
-        (driver (unwrap! (map-get? drivers driver-principal) ERR-DRIVER-NOT-FOUND))
-        (current-assignment (map-get? vehicle-assignments vehicle-id))
-    )
-        (asserts! (is-authorized) ERR-NOT-AUTHORIZED)
-        (asserts! (is-none current-assignment) ERR-VEHICLE-ALREADY-ASSIGNED)
-        (asserts! (is-eq (get status driver) DRIVER-STATUS-AVAILABLE) ERR-DRIVER-UNAVAILABLE)
-        (asserts! (has-required-qualifications driver-principal (get required-qualifications vehicle)) ERR-INSUFFICIENT-QUALIFICATIONS)
-        
-        ;; Update vehicle assignment
-        (map-set vehicle-assignments
-            vehicle-id
-            {
-                driver: driver-principal,
-                assigned-at: block-height,
-                expected-return: expected-return
-            }
-        )
-        
-        ;; Update driver status to assigned
-        (map-set drivers
-            driver-principal
-            (merge driver { status: DRIVER-STATUS-ASSIGNED })
-        )
-        
-        (ok true)
-    )
-)
 
 ;; End a vehicle assignment
 (define-public (end-assignment (vehicle-id (string-ascii 20)))

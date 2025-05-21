@@ -114,85 +114,6 @@
   (default-to false (map-get? authorized-devices tx-sender))
 )
 
-;; Check if the coordinates are valid (basic validation)
-;; Latitude: -90 to 90 degrees, Longitude: -180 to 180 degrees
-(define-private (valid-coordinates? (latitude int) (longitude int))
-  (and
-    (and (>= latitude (* -90 u1000000)) (<= latitude (* 90 u1000000)))
-    (and (>= longitude (* -180 u1000000)) (<= longitude (* 180 u1000000)))
-  )
-)
-
-;; Calculate distance between two coordinates (Haversine formula simplified)
-;; Coordinates are stored as integers with 6 decimal precision (multiplied by 1,000,000)
-;; Returns distance in meters
-(define-private (calculate-distance 
-  (lat1 int) (lon1 int) (lat2 int) (lon2 int))
-  ;; This is a simplified approximation
-  ;; The square root of: (lat2-lat1)^2 + (lon2-lon1)^2 * cosine(lat1)
-  ;; Since Clarity doesn't have floating point or trigonometry functions
-  ;; this returns a rough estimate sufficient for boundary checks
-  (let (
-    (lat-diff (- lat2 lat1))
-    (lon-diff (- lon2 lon1))
-    ;; Approximate cosine factor based on latitude (simplification)
-    (cos-factor (/ (* u1000000 u1000000) (+ u1000000 (abs (/ lat1 u1000)))))
-  )
-    ;; Return rough distance estimate in meters
-    (sqrti (+ (* lat-diff lat-diff) (* (* lon-diff lon-diff) (/ cos-factor u1000))))
-  )
-)
-
-;; Check if a location is outside a boundary
-(define-private (is-outside-boundary 
-  (latitude int) (longitude int) 
-  (center-lat int) (center-lon int) 
-  (radius uint))
-  (> (calculate-distance latitude longitude center-lat center-lon) radius)
-)
-
-;; Add a new location point to history, maintaining a circular buffer of last 100 points
-(define-private (add-to-history
-  (vehicle-id (string-ascii 20))
-  (latitude int) 
-  (longitude int) 
-  (altitude int) 
-  (timestamp uint) 
-  (speed uint) 
-  (heading uint))
-  
-  (let (
-    (current-index-data (default-to { current-index: u0, count: u0 } 
-                          (map-get? history-indexes { vehicle-id: vehicle-id })))
-    (new-index (unwrap-panic (get current-index current-index-data)))
-    (current-count (unwrap-panic (get count current-index-data)))
-    (next-index (if (>= new-index u99) u0 (+ new-index u1)))
-    (new-count (if (< current-count u100) (+ current-count u1) current-count))
-  )
-    ;; Store the location at the current index
-    (map-set location-history
-      { vehicle-id: vehicle-id, index: new-index }
-      {
-        latitude: latitude,
-        longitude: longitude,
-        altitude: altitude,
-        timestamp: timestamp,
-        speed: speed,
-        heading: heading
-      }
-    )
-    
-    ;; Update the index counter
-    (map-set history-indexes
-      { vehicle-id: vehicle-id }
-      { current-index: next-index, count: new-count }
-    )
-    
-    ;; Return success
-    (ok true)
-  )
-)
-
 ;; Check all active boundaries for a vehicle and record violations
 (define-private (check-boundaries
   (vehicle-id (string-ascii 20))
@@ -289,52 +210,6 @@
   )
 )
 
-;; Record a new location for a vehicle
-(define-public (record-location
-  (vehicle-id (string-ascii 20))
-  (latitude int)
-  (longitude int)
-  (altitude int)
-  (timestamp uint)
-  (speed uint)
-  (heading uint))
-  
-  (begin
-    ;; Check authorization
-    (asserts! (or (is-contract-owner) (is-fleet-manager) (is-authorized-device)) ERR-NOT-AUTHORIZED)
-    
-    ;; Check if vehicle exists
-    (asserts! (is-some (map-get? vehicles { vehicle-id: vehicle-id })) ERR-VEHICLE-NOT-FOUND)
-    
-    ;; Validate coordinates
-    (asserts! (valid-coordinates? latitude longitude) ERR-INVALID-COORDINATES)
-    
-    ;; Validate timestamp (should be recent and not in the future)
-    (asserts! (and (> timestamp u0) (<= timestamp (unwrap-panic (get-block-info? time u0)))) ERR-INVALID-TIMESTAMP)
-    
-    ;; Update current location
-    (map-set current-locations
-      { vehicle-id: vehicle-id }
-      {
-        latitude: latitude,
-        longitude: longitude,
-        altitude: altitude,
-        timestamp: timestamp,
-        speed: speed,
-        heading: heading
-      }
-    )
-    
-    ;; Add to location history
-    (add-to-history vehicle-id latitude longitude altitude timestamp speed heading)
-    
-    ;; Check for boundary violations
-    (check-boundaries vehicle-id latitude longitude timestamp)
-    
-    (ok true)
-  )
-)
-
 ;; Add a new geofencing boundary
 (define-public (add-boundary
   (vehicle-id (string-ascii 20))
@@ -349,9 +224,6 @@
     
     ;; Check if vehicle exists
     (asserts! (is-some (map-get? vehicles { vehicle-id: vehicle-id })) ERR-VEHICLE-NOT-FOUND)
-    
-    ;; Validate coordinates
-    (asserts! (valid-coordinates? center-latitude center-longitude) ERR-INVALID-COORDINATES)
     
     ;; Ensure boundary doesn't already exist
     (asserts! (not (boundary-exists vehicle-id boundary-id)) ERR-BOUNDARY-EXISTS)
@@ -390,9 +262,6 @@
     
     ;; Check if boundary exists
     (asserts! (boundary-exists vehicle-id boundary-id) ERR-BOUNDARY-NOT-FOUND)
-    
-    ;; Validate coordinates
-    (asserts! (valid-coordinates? center-latitude center-longitude) ERR-INVALID-COORDINATES)
     
     ;; Validate radius (must be positive and reasonable)
     (asserts! (> radius u0) ERR-INVALID-BOUNDARY)
